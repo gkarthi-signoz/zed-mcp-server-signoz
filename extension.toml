@@ -1,0 +1,10 @@
+id = "mcp-server-signoz"
+name = "SigNoz MCP Server"
+description = "Model Context Protocol Server for SigNoz observability (metrics, logs, traces, alerts, dashboards)"
+version = "0.0.1"
+schema_version = 1
+authors = ["SigNoz <goutham@signoz.io>"]
+repository = "https://github.com/gkarthi/zed-mcp-server-signoz"
+
+[context_servers.mcp-server-signoz]
+name = "SigNoz MCP Server"
