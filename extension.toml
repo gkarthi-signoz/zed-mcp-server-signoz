@@ -4,7 +4,7 @@ description = "Model Context Protocol Server for SigNoz observability (metrics, 
 version = "0.0.1"
 schema_version = 1
 authors = ["SigNoz <goutham@signoz.io>"]
-repository = "https://github.com/gkarthi/zed-mcp-server-signoz"
+repository = "https://github.com/gkarthi-signoz/zed-mcp-server-signoz"
 
 [context_servers.mcp-server-signoz]
 name = "SigNoz MCP Server"
