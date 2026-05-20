@@ -69,28 +69,25 @@ impl zed::Extension for SigNozMcpExtension {
 
         let endpoint = resolve_endpoint(&settings)?;
 
-        // Build the argv for `npx -y mcp-remote <url> [--header ...] [--header ...]`.
-        // mcp-remote is a tiny stdio<->HTTP shim maintained by the MCP community.
-        // It handles the OAuth dance for hosted SigNoz Cloud automatically (popping
-        // open a browser tab on first use and caching tokens locally under ~/.mcp-auth).
-        let mut args = vec!["-y".to_string(), PACKAGE_NAME.to_string(), endpoint];
+        // Build the shell command string for mcp-remote.
+        // We run via `zsh -lc` so that the user's login PATH is available
+        // (covers nvm, homebrew, pyenv, etc.) regardless of when Zed spawns the process.
+        let mut cmd = format!("npx -y {PACKAGE_NAME} {endpoint}");
 
         if let Some(token) = settings.api_key.as_deref().filter(|s| !s.is_empty()) {
-            args.push("--header".to_string());
-            args.push(format!("Authorization:Bearer {token}"));
+            cmd.push_str(&format!(" --header 'Authorization:Bearer {token}'"));
         }
 
         for (name, value) in &settings.headers {
             if name.is_empty() {
                 continue;
             }
-            args.push("--header".to_string());
-            args.push(format!("{name}:{value}"));
+            cmd.push_str(&format!(" --header '{name}:{value}'"));
         }
 
         Ok(zed::Command {
-            command: "npx".to_string(),
-            args,
+            command: "/bin/zsh".to_string(),
+            args: vec!["-lc".to_string(), cmd],
             env: vec![],
         })
     }
