@@ -122,5 +122,4 @@ override it.
 
 Apache-2.0. See [LICENSE](./LICENSE).
 
-This extension is community-maintained and not officially affiliated with
-SigNoz Inc.
+This is the official SigNoz extension for Zed.

@@ -37,8 +37,11 @@ Set `region` to match where your SigNoz Cloud account lives. Find it under
 | Region | Endpoint                              |
 | ------ | ------------------------------------- |
 | `us`   | `https://mcp.us.signoz.cloud/mcp`     |
+| `us2`  | `https://mcp.us2.signoz.cloud/mcp`    |
 | `eu`   | `https://mcp.eu.signoz.cloud/mcp`     |
+| `eu2`  | `https://mcp.eu2.signoz.cloud/mcp`    |
 | `in`   | `https://mcp.in.signoz.cloud/mcp`     |
+| `in2`  | `https://mcp.in2.signoz.cloud/mcp`    |
 
 Using the wrong region will fail authentication.
 
