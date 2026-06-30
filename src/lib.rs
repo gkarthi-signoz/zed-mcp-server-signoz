@@ -25,11 +25,15 @@ struct SigNozSettings {
     #[serde(default)]
     url: Option<String>,
 
-    /// Optional bearer token for clients that can't do OAuth (e.g. headless setups).
-    /// When set, mcp-remote forwards it as `Authorization: Bearer <token>`.
-    /// For SigNoz Cloud this should be a Service Account API key.
+    /// Optional SigNoz API key for clients that can't do OAuth.
+    /// When set, mcp-remote forwards it as `SIGNOZ-API-KEY`.
     #[serde(default)]
     api_key: Option<String>,
+
+    /// Optional SigNoz instance URL used with `api_key`.
+    /// When set, mcp-remote forwards it as `X-SigNoz-URL`.
+    #[serde(default)]
+    signoz_url: Option<String>,
 
     /// Extra `--header "Name:Value"` pairs to forward through mcp-remote.
     /// Useful for tenant slugs, region overrides, etc.
@@ -80,11 +84,22 @@ impl zed::Extension for SigNozMcpExtension {
             args.push("--allow-http".to_string());
         }
 
-        if let Some(token) = settings.api_key.as_deref().filter(|s| !s.is_empty()) {
-            args.extend([
-                "--header".to_string(),
-                format!("Authorization:Bearer {token}"),
-            ]);
+        if let Some(api_key) = settings
+            .api_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            args.extend(["--header".to_string(), format!("SIGNOZ-API-KEY:{api_key}")]);
+        }
+
+        if let Some(signoz_url) = settings
+            .signoz_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            args.extend(["--header".to_string(), format!("X-SigNoz-URL:{signoz_url}")]);
         }
 
         for (name, value) in &settings.headers {
@@ -94,18 +109,108 @@ impl zed::Extension for SigNozMcpExtension {
             args.extend(["--header".to_string(), format!("{name}:{value}")]);
         }
 
-        let command = match zed::current_platform().0 {
-            Os::Windows => "npx.cmd",
-            Os::Mac | Os::Linux => "npx",
-        };
+        // Zed passes the user's login-shell environment (including a Node version
+        // manager's `PATH`) to the *child* process, but it resolves the top-level
+        // `command` name against its own restricted launch `PATH`. A bare `npx`
+        // therefore can't be found and the server hangs on "Connecting..." with
+        // no error. Launch `/bin/sh` instead (an absolute path Zed can always
+        // find), then let the shell resolve `npx` using the rich environment it
+        // inherits, and `exec` so stdio is handed cleanly to the bridge.
+        // On Windows, GUI apps inherit `PATH` from the registry, so `npx.cmd`
+        // works directly.
+        match zed::current_platform().0 {
+            Os::Windows => Ok(zed::Command {
+                command: "npx.cmd".to_string(),
+                args,
+                env: vec![],
+            }),
+            Os::Mac | Os::Linux => {
+                let mut invocation = String::from("exec npx");
+                for arg in &args {
+                    invocation.push(' ');
+                    invocation.push_str(&shell_quote(arg));
+                }
+                Ok(zed::Command {
+                    command: "/bin/sh".to_string(),
+                    args: vec!["-c".to_string(), invocation],
+                    env: vec![],
+                })
+            }
+        }
+    }
 
-        Ok(zed::Command {
-            command: command.to_string(),
-            args,
-            env: vec![],
-        })
+    fn context_server_configuration(
+        &mut self,
+        context_server_id: &ContextServerId,
+        _project: &Project,
+    ) -> Result<Option<zed::ContextServerConfiguration>> {
+        let id: &str = context_server_id.as_ref();
+        if id != SERVER_ID {
+            return Err(format!("unknown context server id: {id}"));
+        }
+
+        Ok(Some(zed::ContextServerConfiguration {
+            installation_instructions: INSTALLATION_INSTRUCTIONS.to_string(),
+            settings_schema: SETTINGS_SCHEMA.to_string(),
+            default_settings: DEFAULT_SETTINGS.to_string(),
+        }))
     }
 }
+
+const INSTALLATION_INSTRUCTIONS: &str = r#"Configure SigNoz MCP Server.
+
+This extension starts the packaged `mcp-remote` bridge with `npx`.
+
+Requirements:
+- Node.js 18+ with `npx` on your PATH.
+- SigNoz Cloud account, or a self-hosted SigNoz MCP HTTP endpoint.
+
+For SigNoz Cloud, set `region` to one of: `us`, `us2`, `eu`, `eu2`, `in`, `in2`.
+If omitted, `region` defaults to `us`.
+
+For self-hosted SigNoz, set `url` to your MCP endpoint, for example:
+`http://localhost:8000/mcp`.
+
+For Cloud OAuth, leave `api_key` empty and complete the browser auth flow.
+On the first connection a browser tab opens for SigNoz login. Complete it
+promptly: if it takes too long the server may report a startup timeout. Just
+start the server again, the cached token makes the next connection instant.
+For header-based Cloud auth, set both `api_key` and `signoz_url`.
+"#;
+
+const SETTINGS_SCHEMA: &str = r#"{
+  "type": "object",
+  "properties": {
+    "region": {
+      "type": "string",
+      "enum": ["us", "us2", "eu", "eu2", "in", "in2"],
+      "description": "SigNoz Cloud region. Ignored when url is set."
+    },
+    "url": {
+      "type": "string",
+      "description": "Full MCP endpoint URL for self-hosted or custom SigNoz MCP servers."
+    },
+    "api_key": {
+      "type": "string",
+      "description": "Optional SigNoz API key for header-based auth."
+    },
+    "signoz_url": {
+      "type": "string",
+      "description": "Optional SigNoz instance URL used with api_key."
+    },
+    "headers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Additional headers forwarded to the remote MCP endpoint."
+    }
+  }
+}"#;
+
+const DEFAULT_SETTINGS: &str = r#"{
+  "region": "us"
+}"#;
 
 /// Pick the MCP endpoint based on user settings, with sensible defaults.
 fn resolve_endpoint(settings: &SigNozSettings) -> Result<String> {
@@ -139,6 +244,24 @@ fn resolve_endpoint(settings: &SigNozSettings) -> Result<String> {
              For a self-hosted SigNoz, set `url` to your MCP endpoint instead."
         )),
     }
+}
+
+/// Single-quote a string for safe inclusion in a POSIX shell command line.
+/// Wraps the value in single quotes and escapes any embedded single quote as
+/// the standard `'\''` sequence, so user-supplied headers, URLs, and API keys
+/// can't break out of quoting or inject shell syntax.
+fn shell_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('\'');
+    for ch in s.chars() {
+        if ch == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push('\'');
+    out
 }
 
 fn validate_http_endpoint(url: &str) -> Result<()> {
