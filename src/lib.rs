@@ -1,10 +1,7 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 use zed_extension_api::{
-    self as zed,
-    serde_json,
-    settings::ContextServerSettings,
-    ContextServerId, Project, Result,
+    self as zed, serde_json, settings::ContextServerSettings, ContextServerId, Os, Project, Result,
 };
 
 const PACKAGE_NAME: &str = "mcp-remote";
@@ -69,25 +66,42 @@ impl zed::Extension for SigNozMcpExtension {
 
         let endpoint = resolve_endpoint(&settings)?;
 
-        // Build the shell command string for mcp-remote.
-        // We run via `zsh -lc` so that the user's login PATH is available
-        // (covers nvm, homebrew, pyenv, etc.) regardless of when Zed spawns the process.
-        let mut cmd = format!("npx -y {PACKAGE_NAME} {endpoint}");
+        let mut args = vec![
+            "-y".to_string(),
+            PACKAGE_NAME.to_string(),
+            endpoint.to_string(),
+            "--transport".to_string(),
+            "http-only".to_string(),
+            "--header".to_string(),
+            "Accept:application/json, text/event-stream".to_string(),
+        ];
+
+        if endpoint.starts_with("http://") {
+            args.push("--allow-http".to_string());
+        }
 
         if let Some(token) = settings.api_key.as_deref().filter(|s| !s.is_empty()) {
-            cmd.push_str(&format!(" --header 'Authorization:Bearer {token}'"));
+            args.extend([
+                "--header".to_string(),
+                format!("Authorization:Bearer {token}"),
+            ]);
         }
 
         for (name, value) in &settings.headers {
             if name.is_empty() {
                 continue;
             }
-            cmd.push_str(&format!(" --header '{name}:{value}'"));
+            args.extend(["--header".to_string(), format!("{name}:{value}")]);
         }
 
+        let command = match zed::current_platform().0 {
+            Os::Windows => "npx.cmd",
+            Os::Mac | Os::Linux => "npx",
+        };
+
         Ok(zed::Command {
-            command: "/bin/zsh".to_string(),
-            args: vec!["-lc".to_string(), cmd],
+            command: command.to_string(),
+            args,
             env: vec![],
         })
     }
@@ -95,7 +109,13 @@ impl zed::Extension for SigNozMcpExtension {
 
 /// Pick the MCP endpoint based on user settings, with sensible defaults.
 fn resolve_endpoint(settings: &SigNozSettings) -> Result<String> {
-    if let Some(url) = settings.url.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(url) = settings
+        .url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        validate_http_endpoint(url)?;
         return Ok(url.to_string());
     }
 
@@ -110,12 +130,22 @@ fn resolve_endpoint(settings: &SigNozSettings) -> Result<String> {
     // rather than letting it fail later inside mcp-remote with a 404.
     match region {
         "us" | "us2" | "eu" | "eu2" | "in" | "in2" => {
-            Ok(format!("https://mcp.{region}.signoz.cloud/mcp"))
+            let endpoint = format!("https://mcp.{region}.signoz.cloud/mcp");
+            validate_http_endpoint(&endpoint)?;
+            Ok(endpoint)
         }
         other => Err(format!(
             "unknown SigNoz Cloud region {other:?}; expected one of: us, us2, eu, eu2, in, in2. \
              For a self-hosted SigNoz, set `url` to your MCP endpoint instead."
         )),
+    }
+}
+
+fn validate_http_endpoint(url: &str) -> Result<()> {
+    if url.starts_with("https://") || url.starts_with("http://") {
+        Ok(())
+    } else {
+        Err("SigNoz MCP endpoint must start with http:// or https://".to_string())
     }
 }
 

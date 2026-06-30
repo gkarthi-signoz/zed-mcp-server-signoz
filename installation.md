@@ -6,14 +6,79 @@ hosted SigNoz Cloud endpoint by default — no binary to install.
 
 ## Requirements
 
-- **Node.js 18+** with `npx` on your `PATH`. The extension launches `npx mcp-remote`
-  as a stdio↔HTTP bridge to SigNoz Cloud.
+- **Zed 1.8+** can connect to HTTP MCP servers directly. This is the
+  recommended path for SigNoz Cloud and self-hosted SigNoz.
+- **Node.js 18+** with `npx` on your `PATH` is only required if you use the
+  extension bridge mode, where the extension launches `npx mcp-remote`.
 - A **SigNoz Cloud** account, or a self-hosted SigNoz instance running the MCP
   server in HTTP transport mode.
 
 ## Configuration
 
-Open your Zed `settings.json` (`zed: open settings`) and add:
+Open your Zed `settings.json` (`zed: open settings`) and add one of the
+following configs.
+
+### Recommended: Zed 1.8+ native HTTP MCP
+
+For SigNoz Cloud:
+
+```json
+{
+  "context_servers": {
+    "signoz": {
+      "enabled": true,
+      "url": "https://mcp.us.signoz.cloud/mcp"
+    }
+  }
+}
+```
+
+Replace `us` with the region where your SigNoz Cloud account lives. Find it
+under **Settings → Ingestion** in the SigNoz UI.
+
+| Region | Endpoint                              |
+| ------ | ------------------------------------- |
+| `us`   | `https://mcp.us.signoz.cloud/mcp`     |
+| `us2`  | `https://mcp.us2.signoz.cloud/mcp`    |
+| `eu`   | `https://mcp.eu.signoz.cloud/mcp`     |
+| `eu2`  | `https://mcp.eu2.signoz.cloud/mcp`    |
+| `in`   | `https://mcp.in.signoz.cloud/mcp`     |
+| `in2`  | `https://mcp.in2.signoz.cloud/mcp`    |
+
+Using the wrong region will fail authentication.
+
+For self-hosted HTTP mode:
+
+```json
+{
+  "context_servers": {
+    "signoz": {
+      "enabled": true,
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "Accept": "application/json, text/event-stream"
+      },
+      "timeout": 60000
+    }
+  }
+}
+```
+
+Do not use Zed's **Add Server** button while testing local self-hosted mode; it
+may create an empty manual entry. Edit `settings.json` directly.
+
+### First-run authentication for Cloud
+
+When prompted, complete the SigNoz Cloud authentication flow. You'll be asked
+for your SigNoz instance URL and a Service Account API key (create one under
+**Settings → Service Accounts**).
+
+### Extension bridge mode
+
+The extension can also launch `npx mcp-remote` for clients or Zed versions that
+expect stdio MCP servers.
+
+For SigNoz Cloud via the extension:
 
 ```json
 {
@@ -29,38 +94,14 @@ Open your Zed `settings.json` (`zed: open settings`) and add:
 }
 ```
 
-### Picking your region
-
-Set `region` to match where your SigNoz Cloud account lives. Find it under
-**Settings → Ingestion** in the SigNoz UI.
-
-| Region | Endpoint                              |
-| ------ | ------------------------------------- |
-| `us`   | `https://mcp.us.signoz.cloud/mcp`     |
-| `us2`  | `https://mcp.us2.signoz.cloud/mcp`    |
-| `eu`   | `https://mcp.eu.signoz.cloud/mcp`     |
-| `eu2`  | `https://mcp.eu2.signoz.cloud/mcp`    |
-| `in`   | `https://mcp.in.signoz.cloud/mcp`     |
-| `in2`  | `https://mcp.in2.signoz.cloud/mcp`    |
-
-Using the wrong region will fail authentication.
-
-### First-run authentication
-
-The first time the agent calls a SigNoz tool, `mcp-remote` opens a browser tab to
-complete the OAuth flow. You'll be asked for your SigNoz instance URL and a
-Service Account API key (create one under **Settings → Service Accounts**).
-Tokens are cached locally in `~/.mcp-auth/` and refreshed automatically.
-
-### Self-hosted SigNoz
-
-Point at any HTTP `/mcp` endpoint by setting `url` instead of `region`:
+For a custom or self-hosted HTTP MCP endpoint via the extension:
 
 ```json
 {
   "context_servers": {
     "mcp-server-signoz": {
       "source": "extension",
+      "enabled": true,
       "settings": {
         "url": "http://localhost:8000/mcp"
       }
@@ -69,26 +110,30 @@ Point at any HTTP `/mcp` endpoint by setting `url` instead of `region`:
 }
 ```
 
-### Headless / non-OAuth setups
+`url` overrides `region`. The extension passes `--transport http-only`,
+`Accept: application/json, text/event-stream`, and `--allow-http` for local HTTP
+URLs when launching `mcp-remote`.
 
-If you can't use the OAuth flow, pass a SigNoz Service Account API key directly
-and it'll be sent as `Authorization: Bearer …`:
+### Header-based authentication
+
+If you can't use OAuth, pass SigNoz Cloud headers directly:
 
 ```json
 {
   "context_servers": {
-    "mcp-server-signoz": {
-      "source": "extension",
-      "settings": {
-        "region": "us",
-        "api_key": "YOUR_SIGNOZ_API_KEY"
+    "signoz": {
+      "enabled": true,
+      "url": "https://mcp.us.signoz.cloud/mcp",
+      "headers": {
+        "SIGNOZ-API-KEY": "YOUR_SIGNOZ_API_KEY",
+        "X-SigNoz-URL": "https://your-instance.signoz.cloud"
       }
     }
   }
 }
 ```
 
-For arbitrary extra headers (tenant slugs, custom proxies):
+For arbitrary extra headers in extension bridge mode:
 
 ```json
 {
@@ -104,9 +149,11 @@ For arbitrary extra headers (tenant slugs, custom proxies):
 ## Verifying it works
 
 Open the Agent Panel and check the indicator next to **SigNoz MCP Server** in the
-settings view. Green = server is active. If it stays red, run `zed: open log` and
-look for `mcp-remote` output. The most common failures are: `npx` not on `PATH`,
-a wrong `region`, or an expired SigNoz API key.
+settings view. Green = server is active. If it stays red, run `zed: open log`.
+For native HTTP mode, check that the `url` is reachable and the region is
+correct. For extension bridge mode, also look for `mcp-remote` output; common
+failures are `npx` not on `PATH`, a wrong `region`, or an expired SigNoz API
+key.
 
 ## What you can ask
 

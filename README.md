@@ -23,12 +23,68 @@ Model Context Protocol so AI assistants can answer questions like:
 Open the Extension Gallery (`cmd-shift-x` / `ctrl-shift-x`) in Zed, search for
 **SigNoz**, and click Install.
 
+For Zed 1.8+ native HTTP MCP, installing this extension is optional. Use the
+extension when you want the packaged `mcp-remote` bridge or region-based Cloud
+defaults.
+
 ## Setup
 
-You need **Node.js 18+** with `npx` on your `PATH` — the extension shells out to
-`npx mcp-remote` to bridge stdio to SigNoz Cloud's HTTP MCP endpoint.
+### Recommended: Zed 1.8+ native HTTP MCP
 
-Add this to your Zed `settings.json`:
+Recent Zed versions can connect to HTTP MCP servers directly. This is the
+recommended setup for both SigNoz Cloud and self-hosted SigNoz because it avoids
+an extra stdio bridge process.
+
+For SigNoz Cloud, add this to your Zed `settings.json`:
+
+```json
+{
+  "context_servers": {
+    "signoz": {
+      "enabled": true,
+      "url": "https://mcp.us.signoz.cloud/mcp"
+    }
+  }
+}
+```
+
+Replace `us` with your SigNoz Cloud region: `us`, `us2`, `eu`, `eu2`, `in`, or
+`in2`. Match the region shown under **Settings → Ingestion** in SigNoz.
+
+When prompted, complete the SigNoz Cloud authentication flow. You will need your
+SigNoz instance URL and a Service Account API key from **Settings → Service
+Accounts**.
+
+### Self-hosted SigNoz
+
+Start the SigNoz MCP server in HTTP mode, then point Zed at its `/mcp` endpoint:
+
+```json
+{
+  "context_servers": {
+    "signoz": {
+      "enabled": true,
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "Accept": "application/json, text/event-stream"
+      },
+      "timeout": 60000
+    }
+  }
+}
+```
+
+Do not use Zed's **Add Server** button for this extension while testing local
+self-hosted mode; it may create a manual empty entry. Edit `settings.json`
+directly.
+
+### Extension bridge mode
+
+The extension can also launch [`mcp-remote`](https://www.npmjs.com/package/mcp-remote)
+for clients or Zed versions that expect stdio MCP servers. This path requires
+**Node.js 18+** with `npx` on your `PATH`.
+
+For SigNoz Cloud via the extension:
 
 ```json
 {
@@ -44,21 +100,14 @@ Add this to your Zed `settings.json`:
 }
 ```
 
-Valid regions: `us`, `us2`, `eu`, `eu2`, `in`, `in2`. Match the region of your
-SigNoz Cloud account (Settings → Ingestion in the SigNoz UI).
-
-On first tool call, `mcp-remote` opens a browser tab for the SigNoz OAuth flow.
-You'll need a SigNoz Service Account API key — create one under **Settings →
-Service Accounts** in SigNoz.
-
-### Self-hosted SigNoz
-
-Point at any HTTP MCP endpoint with `url`:
+For a custom or self-hosted HTTP MCP endpoint via the extension:
 
 ```json
 {
   "context_servers": {
     "mcp-server-signoz": {
+      "source": "extension",
+      "enabled": true,
       "settings": {
         "url": "http://localhost:8000/mcp"
       }
@@ -67,17 +116,24 @@ Point at any HTTP MCP endpoint with `url`:
 }
 ```
 
-### Non-OAuth (headless) setup
+`url` overrides `region`. The extension passes `--transport http-only`,
+`Accept: application/json, text/event-stream`, and `--allow-http` for local HTTP
+URLs when launching `mcp-remote`.
 
-Pass the API key directly:
+### Header-based authentication
+
+For clients or environments that cannot complete OAuth, pass SigNoz Cloud
+headers directly:
 
 ```json
 {
   "context_servers": {
-    "mcp-server-signoz": {
-      "settings": {
-        "region": "us",
-        "api_key": "YOUR_SIGNOZ_API_KEY"
+    "signoz": {
+      "enabled": true,
+      "url": "https://mcp.us.signoz.cloud/mcp",
+      "headers": {
+        "SIGNOZ-API-KEY": "YOUR_SIGNOZ_API_KEY",
+        "X-SigNoz-URL": "https://your-instance.signoz.cloud"
       }
     }
   }
@@ -99,10 +155,10 @@ This is a standard Zed Rust/WASM extension.
 
 ```bash
 # One-time: install Rust via rustup (NOT homebrew — Zed dev extensions require rustup)
-rustup target add wasm32-wasip1
+rustup target add wasm32-wasip2
 
 # Build
-cargo build --release --target wasm32-wasip1
+cargo build --release --target wasm32-wasip2
 
 # Install as a dev extension
 # In Zed: Extensions → Install Dev Extension → select this folder
