@@ -42,13 +42,13 @@ For SigNoz Cloud, add this to your Zed `settings.json`:
   "context_servers": {
     "signoz": {
       "enabled": true,
-      "url": "https://mcp.us.signoz.cloud/mcp"
+      "url": "https://mcp.<region>.signoz.cloud/mcp"
     }
   }
 }
 ```
 
-Replace `us` with your SigNoz Cloud region: `us`, `us2`, `eu`, `eu2`, `in`, or
+Replace `<region>` with your SigNoz Cloud region: `us`, `us2`, `eu`, `eu2`, `in`, or
 `in2`. Match the region shown under **Settings → Ingestion** in SigNoz.
 
 When prompted, complete the SigNoz Cloud authentication flow. You will need your
