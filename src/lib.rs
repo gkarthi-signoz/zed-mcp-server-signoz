@@ -159,23 +159,35 @@ impl zed::Extension for SigNozMcpExtension {
 
 const INSTALLATION_INSTRUCTIONS: &str = r#"Configure SigNoz MCP Server.
 
-This extension starts the packaged `mcp-remote` bridge with `npx`.
+This extension starts the packaged `mcp-remote` bridge with `npx`
+(requires Node.js 18+ with `npx` on your PATH).
 
-Requirements:
-- Node.js 18+ with `npx` on your PATH.
-- SigNoz Cloud account, or a self-hosted SigNoz MCP HTTP endpoint.
+Choose ONE setup:
 
-For SigNoz Cloud, set `region` to one of: `us`, `us2`, `eu`, `eu2`, `in`, `in2`.
-If omitted, `region` defaults to `us`.
+1) SigNoz Cloud — set `region` to one of: `us`, `us2`, `eu`, `eu2`, `in`, `in2`
+   (defaults to `us`):
 
-For self-hosted SigNoz, set `url` to your MCP endpoint, for example:
-`http://localhost:8000/mcp`.
+```json
+{ "region": "us" }
+```
 
-For Cloud OAuth, leave `api_key` empty and complete the browser auth flow.
-On the first connection a browser tab opens for SigNoz login. Complete it
-promptly: if it takes too long the server may report a startup timeout. Just
-start the server again, the cached token makes the next connection instant.
-For header-based Cloud auth, set both `api_key` and `signoz_url`.
+   On the first connection a browser tab opens for SigNoz login. Complete it
+   promptly: if it takes too long the server may report a startup timeout. Just
+   start the server again, the cached token makes the next connection instant.
+
+2) Self-hosted SigNoz — set `url` to your MCP HTTP endpoint. Plaintext
+   `http://` endpoints (e.g. a local instance) connect automatically:
+
+```json
+{ "url": "http://localhost:8000/mcp" }
+```
+
+`url` takes precedence over `region` when both are set.
+
+Authentication:
+- Cloud OAuth: leave `api_key` empty and complete the browser flow (above).
+- Header-based (Cloud or self-hosted): set `api_key` (sent as `SIGNOZ-API-KEY`)
+  and optionally `signoz_url` (sent as `X-SigNoz-URL`).
 "#;
 
 const SETTINGS_SCHEMA: &str = r#"{
